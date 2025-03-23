@@ -1,0 +1,1436 @@
+---
+title: "hDUO ZED-1227 RNA-sequencing report"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: united
+  word_document:
+    toc: yes
+---
+```{css, echo = FALSE}
+
+.carousel-control.left {
+  background-image: none;
+}
+
+.carousel-control.right {
+  background-image: none;
+}
+
+.carousel-indicators li {
+  border: 1px solid black;
+}
+
+.carousel-control .glyphicon {
+  color: black;
+}
+
+```
+***
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Sample overview
+
+```{r Sample overview, echo=F, message=FALSE, warning=FALSE}
+#open the metadata
+library(readxl)
+metadata <- as.data.frame(readxl::read_xlsx("./metadata.xlsx"))
+
+#create HTML table 
+library(DT)
+datatable(metadata,
+  caption = 'Table 1: Sample names, grouping and sequencing statistics')
+
+#round(mean(metadata$Read.count)/1000000,2) #[1] 3.51
+#std <- function(x) sd(x)/sqrt(length(x))
+#round(std(metadata$Read.count)/1000000,2) #[1] 0.07
+
+```
+***
+
+
+## 2. Principal Component Analysis 
+Principal Component Analysis (PCA) is a method used in unsupervised analysis to reduce the dimension of large data sets and is a useful tool to explore sample clusters arising based on the expression profile. The data points, that represent the samples, are projected onto the 2D plane such that they spread out in the two directions that explain most of the differences. Before plotting variance stabilizing transformations were performed. The following figures show the PCA obtained using the variance stabilizing transformation value of all genes (Figure 1).  Under ideal conditions, the samples between groups should be dispersed and the samples within groups should be gathered together. 
+
+```{r PCA, echo=F, message=FALSE, warning=FALSE}
+library(DESeq2)
+library(ggpubr)
+library(scales)
+library(plotly)
+library(tidyverse)
+library(htmlwidgets)
+
+#setwd("C:/Users/mevado/OneDrive - TUNI.fi/ISE/RNA seq CD new project/our data")
+counts <- as.data.frame(read_xlsx("./gene_count.xlsx"))
+counts %>% mutate_at(c(metadata$`Sample_Name`), as.numeric) -> counts
+row.names(counts) <- counts$gene_id
+
+#counts <- read.table("D:/OneDrive/OneDrive - TUNI.fi/ISE/RNA seq CD new project/our data/Expression_raw_counts.txt", header=T)
+counts1 <- as.matrix(counts[,c(metadata$`Sample_Name`)]) #  file created in chunk1 
+#counts <- counts[,2:16]
+#counts %>% mutate_all(as.numeric) -> counts
+
+seobj <- SummarizedExperiment(assays=counts1, colData=as.data.frame(metadata))
+ddsobj <- DESeqDataSet(seobj,design = ~ Treatment)
+
+#pre-filtering to keep only rows that have at least 575 reads total
+keep <- rowSums(counts(ddsobj)) >= ncol(ddsobj)*5 #ncol(ddsobj)*5
+ddsobj <- ddsobj[keep,]
+vst_seobj <- vst(ddsobj)
+
+#creating PCA object
+pca_obja <- plotPCA(vst_seobj, intgroup=c("Treatment"))
+##### plotting prep
+#metadata$VHCrD_group <- NA
+#metadata[metadata$VHCrD >= 2.5,]$VHCrD_group <- "H (>= 2.5) "
+#metadata[metadata$VHCrD < 2.5 ,]$VHCrD_group <- "M (1.2-2.5) "
+#metadata[metadata$VHCrD < 1.2,]$VHCrD_group <- "L (<= 1.2) "
+
+df <- pca_obja$data
+#df <- merge(df, metadata[,c("ID","VHCrD_group","label3")], by.x="name", by.y="ID")
+#hulls <- plyr::ddply(df, "VHCrD_group", function(df) df[chull(df$PC1, df$PC2),])
+
+palette = c("#FFBD35","#3FA796","#8267BE","#502064")
+df$Treatment <- factor(df$Treatment, levels = unique(metadata$Treatment))
+#plotting
+scatterPlota <- ggplot()+
+   geom_point(data = df,aes(PC1, PC2,color=Treatment,
+                           text = paste(
+                             "Sample Name: ", metadata$`Sample_Name`, "\n",
+                              "Biological replicate: ", metadata$`Bio_rep`, "\n",
+                             "Treatment: ", metadata$Treatment, "\n",
+                             "RIN: ", metadata$RIN, "\n",
+                             sep = ""
+                           )))+
+  scale_color_manual(values=palette)+
+  
+  labs(x=sprintf("PC1: %s Variance", percent(pca_obja$plot_env$percentVar[1])),
+       y=sprintf("PC2: %s Variance", percent(pca_obja$plot_env$percentVar[2])) ) +
+  theme_classic()+
+  theme(legend.title = element_blank())
+
+ggplotly(scatterPlota, tooltip = "text")
+
+```
+
+`r kableExtra::text_spec(
+"Figure 1: Principal Component Analysis (PCA) plot for all samples. The PCA was performed on all samples using the DESeq2 transformed counts (using variance stabilizing transformation) of all genes. Dots represent individual samples (identification of subject is shown with results when cursor is at the dot). ", color = "grey")`
+
+
+```{r PCA 2, echo=F, message=FALSE, warning=FALSE}
+metadata2 <- metadata[metadata$Bio_rep != "hDUO03",]
+counts2 <- as.matrix(counts[,c(metadata2$`Sample_Name`)]) #  file created in chunk1 
+#counts <- counts[,2:16]
+#counts %>% mutate_all(as.numeric) -> counts
+
+seobj <- SummarizedExperiment(assays=counts2, colData=as.data.frame(metadata2))
+ddsobj <- DESeqDataSet(seobj,design = ~ Treatment+RIN+passage+RNA_isolation_batch+Pair)
+
+#pre-filtering to keep only rows that have at least 575 reads total
+keep <- rowSums(counts(ddsobj)) >= ncol(ddsobj)*5 #ncol(ddsobj)*5
+ddsobj <- ddsobj[keep,]
+vst_seobj <- vst(ddsobj)
+
+#creating PCA object
+pca_obja <- plotPCA(vst_seobj, intgroup=c("Treatment"))
+##### plotting prep
+#metadata$VHCrD_group <- NA
+#metadata[metadata$VHCrD >= 2.5,]$VHCrD_group <- "H (>= 2.5) "
+#metadata[metadata$VHCrD < 2.5 ,]$VHCrD_group <- "M (1.2-2.5) "
+#metadata[metadata$VHCrD < 1.2,]$VHCrD_group <- "L (<= 1.2) "
+
+df <- pca_obja$data
+#df <- merge(df, metadata[,c("ID","VHCrD_group","label3")], by.x="name", by.y="ID")
+#hulls <- plyr::ddply(df, "VHCrD_group", function(df) df[chull(df$PC1, df$PC2),])
+df$Treatment <- factor(df$Treatment, levels = unique(metadata2$Treatment))
+
+#plotting
+scatterPlota <- ggplot()+
+ geom_point(data = df,aes(PC1, PC2,color=Treatment,
+                           text = paste(
+                             "Sample Name: ", metadata2$`Sample_Name`, "\n",
+                            "Biological replicate: ", metadata2$`Bio_rep`, "\n",
+                             "Treatment: ", metadata2$Treatment, "\n",
+                             "RIN: ", metadata2$RIN, "\n",
+                             sep = ""
+                           )))+
+  scale_color_manual(values=c("#FFBD35","#3FA796","#8267BE","#502064"))+
+  #scale_fill_manual(values=c("#ffd689","#ff89b2","#89edff"))+
+  labs(x=sprintf("PC1: %s Variance", percent(pca_obja$plot_env$percentVar[1])),
+       y=sprintf("PC2: %s Variance", percent(pca_obja$plot_env$percentVar[2])) ) +
+  theme_classic()+
+  theme(legend.title = element_blank())
+
+ggplotly(scatterPlota, tooltip = "text")
+
+```
+
+`r kableExtra::text_spec(
+"Figure 1A: Principal Component Analysis (PCA) plot for all samples. The PCA was performed on all samples using the DESeq2 transformed counts (using variance stabilizing transformation) of all genes. Dots represent individual samples (identification of subject is shown with results when cursor is at the dot). ", color = "grey")`
+
+***
+
+Principal components (PC1, PC2, etc.) significant associations with Sample Covariates are listed in Table 2. They will be used, as a design model for analysis, since of theirs significant association with PC. 
+
+```{r PCs corr, echo=F, message=FALSE, warning=FALSE}
+library(DEGreport)
+#all genes
+res <- degCovariates(assay(vst_seobj), colData(vst_seobj),   plot = F)
+cov <- res$corMatrix[res$corMatrix$pvalue < 0.05,]#[1:4,1:5]
+#cov[cov$covar== "label2",]$covar<- "Label"
+#cov[,c(3,5)] <- round(cov[,c(3,5)],3)
+#cov[,c(4)] <- round(cov[,c(4)],2)
+cov <- cov[order(cov$compare),]
+
+library("kableExtra")
+kbl(cov[,1:3],col.names =  c('Principal component', 'Covariate', 'p-value'), row.names = F,
+    caption = 'Table 2: Correlations between Principal Components (PCs) and covariates.') %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) 
+
+
+```
+***
+
+## 3. Differential Gene Expression Analysis
+
+The differential gene expression analysis was performed with DESeq2 workflow [(Love et al.,2014)](https://doi.org/10.1186/s13059-014-0550-8){target="_blank"}.
+
+The un-normalized, “raw” counts in a form of a matrix of integer values received form sequencing facility were used.  
+
+The first step was filtering of lowly expressed genes. As a threshold value Number of samples * 5 was used. The UMI read counts across all samples that were less than or equal to threshold value were filtered out and genes that pass this filter proceed further with the differential expression analysis.   
+
+
+### Group comparisons
+The listed in Table 3 sample groups comparisons were performed. 
+
+```{r Group comparisons, echo=F, message=FALSE, warning=FALSE}
+#summary(aov(Read.count ~ RIN, data = metadata1))
+
+group_comp <- data.frame(#`No`= c(1:length(combn(unique(metadata$Treatment),2)[2,])),
+                         `Sample Group` = combn(unique(metadata$Treatment),2)[2,],
+                         `Control Group` = combn(unique(metadata$Treatment),2)[1,],
+                         `Group Comparisons` = paste(combn(unique(metadata$Treatment),2)[2,], "VS", combn(unique(metadata$Treatment),2)[1,], sep=" "))
+group_comp <- group_comp[-c(4,5),]
+group_comp$No <- c(1:nrow(group_comp))
+group_comp <- merge(group_comp, unique(metadata[,c("Treatment","label")]), by.x="Sample.Group",by.y="Treatment",all.x = TRUE)
+group_comp <- merge(group_comp, unique(metadata[,c("Treatment","label")]), by.x="Control.Group",by.y="Treatment",all.x = TRUE)
+group_comp <- group_comp[order(group_comp$No),]
+kbl(group_comp[order(group_comp$No),c('No','Sample.Group', 'Control.Group', 'Group.Comparisons')],col.names =  c('No','Sample Group', 'Control Group', 'Group Comparisons'),   row.names = F,
+    caption = 'Table 3: Group Comparisons : Sample Group vs Control Group.') %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) 
+```
+***
+
+### Differential Gene Expression Results 
+
+The results of differential regulation analysis summary are shown in Table 4. Number of up and down-regulated genes for each comparison above is defined as the Benjamini-Hochberg adjusted _P_-values (padj) ≤ 0.05 and log2 fold change threshold (log2FC) of (≥ |0.5|) (1.5-fold up/down-regulated).  
+
+
+```{r Total table, echo=F, message=FALSE, warning=FALSE}
+
+#2. standard analysis
+
+dds <- DESeq(ddsobj)
+
+library("biomaRt")
+human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+#searchAttributes(mart = human, pattern = "type")
+annot_human <- getBM(attributes = c("ensembl_gene_id","external_gene_name","gene_biotype"),
+                     filters = "ensembl_gene_id", values = rownames(counts), mart = human)
+
+results <- list()
+for(i in 1:nrow(group_comp)){
+res <- results(dds, contrast=c("Treatment",group_comp$Sample.Group[i],group_comp$Control.Group[i]))
+resOrdered <- res[order(res$padj),]
+results1 <- as.data.frame(resOrdered)
+results1$ID <- rownames(results1)
+results1$Experiment<-group_comp$Group.Comparisons[i]
+results1$Gene.type = "non-DE"
+results1$Gene.type[results1$padj<=.05 & abs(results1$log2FoldChange)>=0.5] = 'DE'
+results1 <- merge(results1, annot_human, by.x="ID", by.y="ensembl_gene_id")
+results[[i]] <- results1
+}
+names(results) <- group_comp$Group.Comparisons
+
+library(rlist)
+list.save(results, 'hDuo ZED1277 DEG results.rds')
+
+group_comp2 <- data.frame(`No` = group_comp$No,
+                          `Group Comparisons` = group_comp$Group.Comparisons,
+                  `N DEG` =  unlist(lapply(results, function(x) nrow(x[x$Gene.type=="DE",]))),
+                  `N downregulated` = unlist(lapply(results, function(x) nrow(x[x$Gene.type=="DE" & x$log2FoldChange < 0.5,]))),
+                  `N upregulated` = unlist(lapply(results, function(x) nrow(x[x$Gene.type=="DE" & x$log2FoldChange > 0.5,]))))
+kbl(group_comp2,col.names =  c('No','Group Comparisons', '# DEG', '# downregulated', '# upregulated'),
+    caption = 'Table 4. Summary of the results of differential regulation analysis.') %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) 
+
+```
+***
+
+### Volcano plots {.tabset}
+
+The Volcano plot provides a way to perform a quick visual identification of the gene displaying large-magnitude changes which are also statistically significant. The plot is constructed by plotting -log10(padj) on the y-axis, and the log2 of the expression fold change between the two experimental groups on the x-axis. There are two regions of interest in the plot: those points that are found towards the top of the plot (high statistical significance) and at the extreme left or right (strongly down and up-regulated respectively).
+
+```{r Volcano plot,results='asis', echo=F, message=FALSE, warning=FALSE,fig.cap=paste("Figure 2: Volcano plot to visualize the results of differential regulation analysis for ", group_comp$Group.Comparisons, " comparison. It shows the relationship between the -log10(padj) and the log2FC values obtained from DESeq2. The genes with padj <=  0.05 and log2FC threshold >= 0.5 & <= -0.5) were colored in green. The dashed horizontal dashed line represents the padj threshold of 0.05 and the vertical dashed lines represent the log2FC thresholds >= |0.5|). Cursor at dot identifies the gene and significance.")}
+
+
+plt <- htmltools::tagList()
+
+for(i in 1:nrow(group_comp)){
+ cat('####',group_comp$Group.Comparisons[i],' \n')
+ 
+df <- results[[i]]
+
+
+experiment <- group_comp$Group.Comparisons[i]
+df$padj <- as.numeric(as.character(df$padj))
+DEG1<-na.omit(df)
+DEG1$Experiment<-experiment
+DEG1$Gene.type = "non-DE"
+DEG1$Gene.type[DEG1$padj<=.05 & abs(DEG1$log2FoldChange)>=0.5] = 'DE'
+
+DEG1$size = 1
+DEG1$size[DEG1$Gene.type %in% c("DE")] = 1.5
+
+library("writexl")
+write_xlsx(DEG1[,c(1,8,2:7,9:11)],paste("./tables/", gsub("/", " per ", group_comp$Group.Comparisons[i]) , "_ALL_Differentially_regulated_genes.xlsx", sep=""))
+
+library(dplyr)
+#genes to highlight
+data <- DEG1[DEG1$Gene.type=="DE", ] %>% top_n(5,log2FoldChange)
+data <- rbind(data,DEG1[DEG1$Gene.type=="DE", ] %>% top_n(-5,log2FoldChange))
+data <- rbind(data,DEG1[DEG1$Gene.type=="DE", ] %>% top_n(-5,padj))
+
+library(ggplot2)
+library(ggrepel)
+
+p <- ggplot(DEG1, aes(x = log2FoldChange, y = -log10(padj), color=Gene.type, #shape=Experiment,
+                      text = paste(
+                        "Gene Name: ", external_gene_name, "\n",
+                        "ENSEMBL ID: ", ID, "\n",
+                        "LogFC: ",round(log2FoldChange,2), "\n",
+                        "p-value adj: ", round(padj,3), "\n",
+                        "Mean expression: ", round(baseMean,2), "\n",
+                        "Gene type: ", gene_biotype, "\n",
+                        sep = ""
+                      ))) + 
+  geom_point(size=DEG1$size)+
+  scale_color_manual(values=c("#64cdac","#d3d3d3"))+ #, "darkolivegreen2", "azure2"))+
+  #guides(colour = guide_legend(override.aes = list(shape = 15)))+
+  #guides(shape = guide_legend(override.aes = list(colour = "black")))+
+  #ylim(0,12)+ xlim(-4.5,4.5)+
+  xlab("log2 fold change") + ylab("-log10(padj) ")+
+  geom_vline(xintercept = c(-0.5, 0.5), linetype = "dashed", colour="#858585", size=0.1) + 
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour="#858585", size=0.1) + 
+  theme_bw()+
+  theme(legend.position="top",
+    legend.title = element_blank()
+  )+
+#  ggtitle(experiment) +
+#  geom_text_repel(
+#    data = unique(data),
+#    aes(log2FoldChange, -log10(padj), label = external_gene_name),
+#    size = 2, # font size in the text labels
+#    colour="#858585",
+#    box.padding = unit(0.1, "lines"),
+#    point.padding = unit(0.1, "lines")
+#  )+
+  font("ylab", size = 8)+
+  font("xlab", size = 8)+
+  font("xy.text", size = 10, face = "bold")+
+  font("legend.title",  size = 8, face = "bold")+
+  font("legend.text", size=8)
+
+print(htmltools::tagList(ggplotly(p, tooltip = "text")%>%
+  layout(legend = list(
+    orientation = "h",x = 0.4, y = 1.05))))
+cat(' \n \n')}
+```
+***
+
+### DEG tables {.tabset}
+For each differential gene expression analysis, all significantly deferentially expressed genes are listed. Significant changes are defined as padj ≤  0.05 and log2FC threshold of (≥ |0.5|). 
+
+Full tables are available in Tables folder or using the link: [Tables folder](./tables/){target="_blank} .
+
+
+```{r DEG table,results='asis', echo=F, message=FALSE, warning=FALSE}
+library(formattable)
+for(i in 1:nrow(group_comp)){
+ cat('####',group_comp$Group.Comparisons[i],' \n')
+  
+DEG1 <- as.data.frame(readxl::read_xlsx(paste("./tables/", gsub("/", " per ", group_comp$Group.Comparisons[i]) , "_ALL_Differentially_regulated_genes.xlsx", sep="")))
+
+#-------------------------------------------------------------------------plots for table-------------------------------------------------------
+library(ggplot2)
+library(RCurl)
+library(htmltools)
+# function found here https://stackoverflow.com/questions/50244709/how-to-store-r-ggplot-graph-as-html-code-snippet
+encodeGraphic <- function(g)  {
+  png(tf1 <- tempfile(fileext = ".png"))  # Get an unused filename in the session's temporary directory, and open that file for .png structured output.
+  print(g)  # Output a graphic to the file
+  dev.off()  # Close the file.
+  txt <- RCurl::base64Encode(readBin(tf1, "raw", file.info(tf1)[1, "size"]), "txt")  # Convert the graphic image to a base 64 encoded string.
+  myImage <- htmltools::HTML(sprintf('<img src="data:image/png;base64,%s">', txt))  # Save the image as a markdown-friendly html object.
+  return(myImage)
+}
+
+#DESeq2 size factor normalization
+ddsobj <- estimateSizeFactors(ddsobj)
+normalized_counts <- counts(ddsobj, normalized=TRUE)
+
+#library(reshape2)
+#IDs <- DEG1[DEG1$Gene.type == "DE",]$ID
+#melt<-melt(normalized_counts[rownames(normalized_counts) %in% IDs,])
+#melt$variable <- rownames(melt)
+#melt$log10_Expr <- log10(melt$value+1)
+#melt <-merge(melt, metadata[,c("Sample_Name","Treatment","label")],by.x="Var2", by.y="Sample_Name") 
+#melt <-merge(melt, DEG1[,c("ID","external_gene_name")],by.x="Var1", by.y="ID") 
+#melt  %>% mutate_at(c("log10_Expr"), as.numeric)-> melt
+
+#collect p-value annotations
+
+#anno <- data.frame()
+#  for(j in 1:length(results)){
+#    tmp <- results[[j]]
+#    tmp2 <- tmp[tmp$ID %in% IDs ,c("ID","external_gene_name","padj", "Experiment")]
+#    anno <- rbind(anno,tmp2)
+#  }
+  
+#anno <- merge(anno, group_comp, by.x="Experiment", by.y="Group.Comparisons")
+
+
+#library(numform)
+#anno %>% 
+#  #mutate_at(c(anno$padj), as.numeric) %>%
+#  mutate(p_new = ifelse(padj > 0.01, c(paste("italic('P')~`=", f_num(padj,2), "`")), padj)) %>% 
+#  mutate(p_new = ifelse(padj < 0.01, c(paste("italic('P')~`=", f_num(padj,3), "`")), p_new)) %>%
+#  mutate(p_new = ifelse(padj < 0.001, c(paste("italic('P')~`", "<.001", "`")),p_new))->anno
+
+
+#for(g in unique(melt$Var1)){
+#  melt_g <- melt[melt$Var1== g,]
+#  anno_g <- anno[anno$ID==g,]
+  
+#  anno_g$log10_Expr <- max(melt_g$log10_Expr)
+#  anno_g$y_pos <- max(melt_g$log10_Expr)*seq(from=1.1, to=1.2, length.out=length(results))
+  
+#bp<-ggboxplot(melt_g, x = "label", y = "log10_Expr", outlier.colour = NA, order = unique(metadata2$label), 
+#               ylab = "log10(Expression, counts)", yscale="log2",
+#                palette = palette,  
+#                fill="label", 
+#                title = paste(g," (",unique(melt_g$external_gene_name),")", " mRNA expression", sep="")
+# )+
+#    geom_jitter(size=1.5, alpha=1)+
+#   scale_y_continuous(limits=c(round(min(melt_g$log10_Expr)-0.5,1), round(max(anno_g$y_pos)+0.5,1)))+
+#    theme(axis.title.x = element_blank(),
+#          strip.text.x = element_text(size = 6))+
+#    labs(fill = element_blank())+
+#    geom_signif(data=anno_g,
+#                aes(xmin=label.x, xmax=label.y, annotations=p_new, y_position=y_pos),
+#                textsize = 10/.pt, 
+#                manual=T, parse=T, size=0.3)
+  
+  
+#  bp <- bp +
+#    theme(plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none",
+#          axis.text.x = element_text(size=12, color = "black"),
+#         axis.text.y= element_text(size=12, color = "black"),
+#          axis.title.y = element_text(size=12, color = "black"),
+#         panel.spacing.x=unit(0, "lines"))
+  
+#  bp
+#  HTMLOut <- paste("./picture/", paste(g,"_(",unique(melt_g$external_gene_name),")", sep=""),".html", sep="") # Say where to save the html file.
+  
+#  hg <- encodeGraphic(bp)  # run the function that base64 encodes the graph
+#  forHTML <- list(hg)
+#  save_html(forHTML, HTMLOut)  # output it to the html file.
+  
+#}
+
+DEG1[, c(3:6)] <- round(DEG1[, c(3:6)],2)
+DEG1[,7] <- formatC(DEG1[,7], format = "e", digits = 2)
+DEG1[,8] <- formatC(DEG1[,8], format = "e", digits = 2)
+
+#---------------------------------------------------------------------------------------------------------------------------------------------------
+a <-   DEG1[DEG1$Gene.type == "DE",]
+a$link <- paste("<a href=./picture/", 
+                a$ID,"_(",a$external_gene_name,")", ".html>", 
+                a$external_gene_name, '</a>',
+                sep="")
+#datatable(a [,c("ID", "link", "baseMean","log2FoldChange","lfcSE","stat","pvalue","padj",              
+#                "gene_biotype","Experiment")], colnames = c('ENSEMBL ID', 'Gene Name', 'baseMean', 'log2FC', 'lfcSE','stat',"pvalue", "padj","Gene biotype", "Comparison"),
+#          caption = 'Table 5A: List of DEG PGCp VS GFDp. baseMean, mean of normalized counts for all samples; log2FC, log2 fold change; lfcSE – standard error; stat, Wald statistic; pvalue, Wald test p-value; padj, Benjamini-Hochberg adjusted p-values; Gene biotype, gene ensemble classification.(Click gene name to display mRNA expression levels in dot plot) ',rownames = FALSE, escape = FALSE)
+#datatable(a, escape = FALSE)
+
+print(htmltools::tagList(
+  datatable(a [,c("ID", "link", "baseMean","log2FoldChange","lfcSE","stat","pvalue","padj",              
+                "gene_biotype","Experiment")], colnames = c('ENSEMBL ID', 'Gene Name', 'baseMean', 'log2FC', 'lfcSE','stat',"pvalue", "padj","Gene biotype", "Comparison"),
+          caption = 'Table 5A: List of DEG PGCp VS GFDp. baseMean, mean of normalized counts for all samples; log2FC, log2 fold change; lfcSE – standard error; stat, Wald statistic; pvalue, Wald test p-value; padj, Benjamini-Hochberg adjusted p-values; Gene biotype, gene ensemble classification.(Click gene name to display mRNA expression levels in dot plot) ',rownames = FALSE, escape = FALSE)))
+cat(' \n \n')}
+```
+***
+
+
+### Heatmaps {.tabset}
+
+
+A heatmap is a graphical representation of data that uses a system of color-coding to represent different values. All identified DEGs, organized as a heatmap, presented in Figure 3.  
+
+
+```{r Heatmap DEG, results='asis',echo=F, message=FALSE, warning=FALSE,fig.cap=paste("Figure 3: Differential gene transcriptome for ", group_comp$Group.Comparisons, " comparison.")}
+library("circlize")
+library(ComplexHeatmap)
+
+for(i in 1:nrow(group_comp)){
+ cat('####',group_comp$Group.Comparisons[i],' \n')
+DEG1 <- as.data.frame(readxl::read_xlsx(paste("./tables/", gsub("/", " per ", group_comp$Group.Comparisons[i]) , "_ALL_Differentially_regulated_genes.xlsx", sep="")))
+DEG1 <- DEG1[DEG1$Gene.type=="DE",]
+counts1<- normalized_counts[DEG1$ID,]
+#sort the data by logFC
+DEG1 <- DEG1[order(DEG1$log2FoldChange, decreasing=T),]
+counts1<-counts1[match(rownames(counts1),DEG1$ID),]
+#change id to names
+#tmp <- annot_human[annot_human$ensembl_gene_id %in% rownames(counts1), c("ensembl_gene_id","external_gene_name")]
+rownames(counts1) <- DEG1$external_gene_name[match(rownames(counts1), DEG1$ID)]
+
+#scale the data
+m.data_sc<-t(scale(t(counts1)))
+
+#sort columns
+#metadata <- metadata[order(metadata$label3, metadata$VHCrD),]
+m.data_sc <- m.data_sc[,metadata2$Sample_Name]
+#create annotation 1(Sample type)
+type1<- metadata2$label
+
+top = HeatmapAnnotation(Samples = anno_block(gp = gpar(fill = palette, lty="blank"),
+                                             labels = unique(type1), 
+                                             labels_gp = gpar(col = "white", fontsize = 10)),
+                                             gap = unit(2, "mm"),
+                                             annotation_height = unit(0.3, "cm"))
+#height = unit(0.3, "cm"))
+
+#create annotation 2 (log2FC)
+col_fun = colorRamp2(c(max(DEG1$log2FoldChange), 
+                       mean(DEG1$log2FoldChange), min(DEG1$log2FoldChange)), 
+                     c("#053061", "#F7F7F7","#67001F" ))
+row <- rowAnnotation(log2FC = DEG1$log2FoldChange,
+                     col = list(log2FC = col_fun),
+                     show_annotation_name = F,
+                     annotation_legend_param = list(log2FC = list(title_position = "topcenter",labels_gp = gpar(fontsize = 6),
+                                                                  title_gp = gpar(fontsize = 6),direction = "horizontal",
+                                                                  legend_width=unit(2.7,"cm"),grid_height = unit(0.2, "cm"))),
+                     simple_anno_size = unit(2.5, "mm"))
+
+#create color scheme for heatmap
+newcolors <- c(#"#67001F", #red
+  "#B2182B",
+  #"#D6604D", 
+  #"#F4A582",
+  "#FDDBC7", 
+  "#F7F7F7", #white 
+  "#D1E5F0", 
+  #"#92C5DE",
+  "#4393C3", 
+  #"#2166AC", 
+  "#053061") #blue
+ht_list = Heatmap(m.data_sc, 
+                  name = "Row Z-Score of Expression",
+                  top_annotation = top, #ha1,
+                  show_column_names = FALSE, 
+                  col=newcolors,
+                  column_title_gp = gpar(fontsize = 1, col="White"),
+                  column_order = metadata2$Sample_Name,
+                  row_names_side = "left",
+                  #row_order = order,
+                  cluster_rows = T, 
+                  show_row_dend = F,
+                  row_names_gp = gpar(fontsize = 6), 
+                  column_split = factor(type1, levels = unique(type1)),
+                  column_gap = unit(0.5,"mm"),
+                  heatmap_legend_param = list(
+                    at = c(-1:4),
+                    labels = c(-1:4),
+                    title = "Row Z-Score",
+                    labels_gp = gpar(fontsize = 6),
+                    title_gp = gpar(fontsize = 6),
+                    direction = "horizontal",
+                    legend_width=unit(2.1,"cm"),
+                    grid_height = unit(0.2, "cm"),
+                    title_position = "topcenter"))#+row
+
+draw(ht_list, merge_legend = F, heatmap_legend_side = "bottom", annotation_legend_side = "bottom", auto_adjust = FALSE)
+
+cat(' \n \n')
+}
+```
+***
+
+
+
+
+### Common significantly differentially expressed genes between group comparisons {.tabset}
+
+To identify common significantly differentially regulated genes that occur between the different the group comparisons, [Upset plot](https://jku-vds-lab.at/tools/upset/){target="_blank"} (Figure 4A) and Venn diagram (Figure 4B) are used. On Figure 4A the numbers on top of the barplot shows the number of unique genes common to the comparisons specified below using black circles. 
+
+#### UpSet
+```{r UpSet, echo=F, message=FALSE, warning=FALSE}
+library(UpSetR)
+library(dplyr)
+list.2 <- lapply(results, function(x) x[x$Gene.type=="DE",c("ID","Gene.type")])
+
+common <- list.2 %>% reduce(full_join, by="ID")
+colnames(common) <- c("Gene",c(group_comp$Group.Comparisons))
+common[is.na(common)] <-  0
+common[common == "DE"] <-  1
+common <- as.data.frame(common)
+common %>% mutate_at(c(2:(nrow(group_comp)+1)), as.numeric) -> common
+upset(common, sets = c(group_comp$Group.Comparisons),order.by = "freq")
+```
+
+`r kableExtra::text_spec("Figure 4A: Visualization of the intersection of significantly differentially regulated genes from all comparisons using an UpSet plot. The numbers on top of the barplot indicate the number of unique genes common to the comparisons specified below using black circles. ", color = "grey")` 
+
+#### Venn diagram
+```{r Venn, echo=F, message=FALSE, warning=FALSE}
+library(VennDiagram)
+library(ggplotify)
+venn <- list(comparison1 <- c(1,4),
+             comparison2 <- c(2,3))
+# Chart all
+plots <- list()
+for(j in 1:length(venn)){
+  p1 <- grobTree(venn.diagram(
+  x = lapply(results, function(x) x[x$Gene.type=="DE",c("ID")])[c(venn[[j]])],
+  category.names = c(group_comp$Group.Comparisons)[c(venn[[j]])],
+  filename = NULL,
+  #fontfamily="sans", #counts font
+  #cex = 0.9, #counts size; 0.9 is 10pt
+  #cat.fontfamily =  "sans", #labels font
+  #cat.cex = 0.7, #labels size; 0.8 is appr 9pt
+  #cat.default.pos = "outer", #label position
+  #cat.pos = seq(from=5, to=360, length.out=length(venn[[j]])),
+  #cat.dist = 0.01,
+  col=alpha(palette,0.5)[1:length(venn[[j]])], 
+fill = alpha(palette,0.3)[1:length(venn[[j]])], 
+rotation.degree = 45,
+margin = 0.12))
+plots[[j]] <-as.ggplot(p1) 
+
+}
+names(plots) <- names(venn)
+plots
+```
+
+`r kableExtra::text_spec("Figure 4B: Venn diagrams of all differentially expressed genes. ", color = "grey")`
+
+
+### Common significant genes list
+
+
+```{r UpSet table, echo=F, message=FALSE, warning=FALSE}
+common[common == 0] <-  "non-DE"
+common[common == 1] <- "DE"
+annot_human2 <- getBM(attributes = c('ensembl_gene_id',"external_gene_name","namespace_1003","go_id","name_1006"),
+                      filters = "ensembl_gene_id", values = common$Gene, mart = human)
+annot_humanBP <- annot_human2[annot_human2$namespace_1003=="biological_process",]
+annot_humanMF <- annot_human2[annot_human2$namespace_1003=="molecular_function",]
+annot_humanCC <- annot_human2[annot_human2$namespace_1003=="cellular_component",]
+
+
+
+#check the levels of GO terms
+library(GOxploreR)
+
+connections <- data.frame()
+
+for(i in unique(annot_human2$go_id)){
+  ns <- annot_human2[annot_human2$go_id == i, ]$namespace_1003[1]  # Take first match
+  
+  if(ns == "biological_process"){
+    tryCatch({
+      tmp <- GOTermBPOnLevel(goterm = i)
+      connections <- rbind(connections, tmp)
+    }, error = function(e) message('ERROR!'))
+    
+  } else if(ns == "molecular_function"){
+    tryCatch({
+      tmp <- GOTermMFOnLevel(goterm = i)
+      connections <- rbind(connections, tmp)
+    }, error = function(e) message('ERROR!'))
+    
+  } else {
+    tryCatch({
+      tmp <- GOTermCCOnLevel(goterm = i)
+      connections <- rbind(connections, tmp)
+    }, error = function(e) message('ERROR!'))
+  }
+}
+
+
+annot_human2 <- merge(annot_human2,connections, by.x="go_id", by.y="Term")
+annot_human2 <- annot_human2[annot_human2$Level != "0",]
+
+terms <- data.frame()
+for(i in unique(annot_human2$external_gene_name)){
+  for(j in unique(annot_human2$namespace_1003)){
+    tmp <- annot_human2[annot_human2$external_gene_name == i & annot_human2$namespace_1003 == j,]
+    tmp <- tmp[order(tmp$Level),][1,]
+    terms <- rbind(terms,tmp)
+  }}
+
+list.2 <- lapply(results, function(x) x[x$Gene.type=="DE",c("ID","log2FoldChange")])
+
+common2 <- list.2 %>% reduce(full_join, by="ID")
+colnames(common2) <- c("Gene",c(group_comp$Group.Comparisons))
+common2 <- as.data.frame(common2)
+rownames(common2) <- common2$Gene
+common2[is.na(common2)] <-  "non-DE"
+common2[common2 > 0 & common2 != "non-DE"] <-  "DE UP"
+common2[common2 < 0 & common2 != "non-DE"] <-  "DE DOWN"
+common2$Gene <- rownames(common2)
+common2 <- merge(common2,na.omit(terms[terms$namespace_1003=="biological_process",c("ensembl_gene_id","external_gene_name","name_1006","go_id")]),by.x="Gene", by.y="ensembl_gene_id", all.x = T)
+colnames(common2)[colnames(common2) == "name_1006"] <- "GO - Biological proces"
+common2 <- merge(common2,na.omit(terms[terms$namespace_1003=="molecular_function",c("ensembl_gene_id","name_1006","go_id")]),by.x="Gene", by.y="ensembl_gene_id", all.x = T)
+colnames(common2)[colnames(common2) == "name_1006"] <- "GO - Molecular Function"
+common2 <- merge(common2,na.omit(terms[terms$namespace_1003=="cellular_component",c("ensembl_gene_id","name_1006","go_id")]),by.x="Gene", by.y="ensembl_gene_id", all.x = T)
+colnames(common2)[colnames(common2) == "name_1006"] <- "GO - Cellular component"
+
+datatable(common2[,c("external_gene_name", c(group_comp$Group.Comparisons),"GO - Biological proces","GO - Molecular Function","GO - Cellular component")], 
+          colnames = c('Gene Name', c(group_comp$Group.Comparisons), "GO - Biological proces","GO - Molecular Function","GO - Cellular component" ),
+          caption = 'Table 6: Interactive table depicting the intersection between significantly differentially regulated genes across all comparisons. non-DE, not significantly differentially regulated in the corresponding group comparison; DE UP, significantly differentially upregulated in the corresponding group comparison; DE DOWN, significantly differentially downregulated in the corresponding group comparison. ', rownames = FALSE, filter = 'top')
+```
+***
+
+### Pearson's correlation heatmap
+
+To check similarity between individual samples, the pairwise correlation was performed. With selected DEG genes from table 6, correlation coefficient for those genes for each pair was obtained and organized in a form of heatmap (Figure 5).     
+
+```{r Corr heatmap, echo=F, message=FALSE, warning=FALSE}
+
+counts_comb<- normalized_counts[common2$Gene,]
+
+cormat <- round(cor(counts_comb),2)
+
+
+type1<- metadata2$label
+
+
+top = HeatmapAnnotation(Samples = anno_block(gp = gpar(fill = palette, lty="blank")),
+                          gap = unit(1, "mm"),
+                         annotation_height = unit(0.5, "cm"))
+
+
+
+
+label = as.vector(palette)
+names(label) <- unique(type1)
+col_type2 <- list(`label`= label)
+  
+row=rowAnnotation(`label` = as.character(type1), col=col_type2, 
+                  show_annotation_name = F,
+                  annotation_legend_param = list(`label` = list(title_position = "topcenter",labels_gp = gpar(fontsize = 6),
+                                                                title_gp = gpar(fontsize = 5),direction = "horizontal",nrow = 1,
+                                                                legend_width=unit(3,"cm"),grid_height = unit(0.2, "cm"))),
+                  
+                  gap = unit(1, "mm"),
+                  annotation_height = unit(0.2, "cm"))
+#create color scheme for heatmap
+newcolors <- c(#"#67001F",
+  "#B2182B",
+  #"#D6604D", 
+  #"#F4A582",
+  #"#FDDBC7", 
+  "#F7F7F7", #white 
+  #"#D1E5F0", 
+  #"#92C5DE",
+  #"#4393C3", 
+  "#2166AC"  #, 
+  #"#053061"
+)
+
+ht_list = Heatmap(cormat, name = "Pearson\nCorrelation", top_annotation = top, 
+                  show_column_names = F,
+                  show_row_names = F, 
+                  col=newcolors,
+                  column_order= metadata2$Sample_Name,
+                  row_order= metadata2$Sample_Name,
+                  cluster_rows = F,  
+                  cluster_columns = F, 
+                  column_split = factor(type1, unique(type1)),
+                  column_gap = unit(0.5,"mm"),
+                  row_split = factor(type1, unique(type1)),
+                  row_title = NULL,
+                  row_gap = unit(2,"mm"),
+                  column_title_gp = gpar(fontsize = 0.5, col="White"),
+                  heatmap_legend_param = list(
+                    at = c(0:1),
+                    labels = c(0:1),
+                    title = "Pearson\nCorrelation",
+                    labels_gp = gpar(fontsize = 5),
+                    title_gp = gpar(fontsize = 5),direction = "horizontal",
+                    legend_width=unit(2,"cm"),grid_height = unit(0.2, "cm"),
+                    title_position = "topcenter"))+
+  row
+
+draw(ht_list,merge_legend = TRUE,heatmap_legend_side = "bottom", annotation_legend_side = "bottom", row_gap = unit(0.5, "mm"),auto_adjust = T)
+
+
+
+
+
+```
+***
+`r kableExtra::text_spec("Figure 5. The pairwise correlation heatmap visualizes cross-correlations between the transcriptomic profiles of the samples. ", color = "grey")`
+
+
+## 4. Enrichment Analysis 
+
+### GO enrichment analysis results {.tabset} 
+
+GO is the abbreviation of Gene Ontology, which is a major bioinformatics classification system to unify the presentation of gene properties across all species. It includes three main branches: cellular component, molecular function, and biological process. GO terms with padj < 0.05 are usually considered to be significant enrichment. 
+
+Full tables with all detected significant GO terms and annotated genes are available in Tables folder or can be downloaded using the link: [Tables folder](./tables/){target="_blank"}. 
+
+```{r GO table, results='asis',echo=F, message=FALSE, warning=FALSE}
+#GO enrichment analysis with topGO
+library(topGO)
+library(org.Hs.eg.db) #annotation package
+
+
+GOresults <- list()
+sel_GO<- data.frame()
+for(i in 1:nrow(group_comp)){
+  cat('####',group_comp$Group.Comparisons[i],' \n')
+  
+  experiment <- group_comp$Group.Comparisons[i]
+  #---------------------------------------------------------------------GO enrichment----------------------------------------------------------------------------------------------
+  #creates the named vector of genes FDRs for GO analysis. 
+  DEG1 <- results[[i]]
+  DEG1$log2FoldChange <- as.numeric(as.character(DEG1$log2FoldChange))
+  DEG1$padj <- as.numeric(as.character(DEG1$padj))
+  
+  logFC <- 0.5
+  genes <-DEG1[abs(DEG1$log2FoldChange)>=logFC & is.na(DEG1$padj)==F,]$padj
+  names(genes) <- DEG1[abs(DEG1$log2FoldChange)>=logFC & is.na(DEG1$padj)==F,]$external_gene_name
+  
+  selection <- function(allScore){ return(allScore < 0.05)} # function that returns TRUE/FALSE for p-values<0.05
+  allGO2genes <- annFUN.org(whichOnto="BP", feasibleGenes=NULL, mapping="org.Hs.eg.db", ID="symbol") #c("entrez", "genbank", "alias", "ensembl", "symbol", "genename", "unigene")
+  GOdata <- new("topGOdata",
+                ontology="BP",
+                allGenes=genes,
+                annot=annFUN.GO2genes,
+                GO2genes=allGO2genes,
+                geneSel=selection,
+                nodeSize=5)
+  
+  resultFisher <- runTest(GOdata, algorithm = "classic", statistic = "fisher")
+  #results.ks <- runTest(GOdata, algorithm="elim", statistic="ks")
+  goEnrichment1 <- GenTable(GOdata,  classicFisher = resultFisher,topNodes = 1000)
+  goEnrichment1$adj_pval <- p.adjust(goEnrichment1$classicFisher, "fdr")
+  goEnrichment1$Category <- rep("BP", dim(goEnrichment1)[1])
+  goEnrichment1 <- goEnrichment1[goEnrichment1$adj_pval <0.05,] # enriched GOs with p.value <0.05
+  #Extract list of genes, assosiated with each term
+  AnnotatedGenes = sapply(sapply(goEnrichment1$GO.ID, 
+                                 function(x) as.character(unlist(genesInTerm(object = GOdata, whichGO = x)))), 
+                          paste, collapse=', ') 
+  goEnrichment1$genes <- AnnotatedGenes
+  goEnrichment1$comparison <- rep(experiment, nrow(goEnrichment1))
+  
+  colnames(goEnrichment1)[1] <- c("ID")
+  write_xlsx(goEnrichment1,path=paste("./tables/", gsub("/", " per ", group_comp$Group.Comparisons[i]) , "_ALL_enriched_GO_terms.xlsx", sep=""))
+  
+  tmp <- goEnrichment1[grep("TGM2",goEnrichment1$genes),]
+if(nrow(tmp)!=0){
+    sel_GO <- rbind(sel_GO, tmp)} else{
+      sel_GO <- sel_GO
+    }
+  
+ caption <-  paste("Table 7: GO enrichment analysis results, ", group_comp$Group.Comparisons[i]," comparison. Top 20 are shown. ID,unique identification id of Gene Ontology database; Term,function description of Gene Ontology; Annotated, total number of annotated genes; Significant, number of annotated genes that are significantly differentially expressed (e.g. padj <= 0.05); Expected, number of annotated genes to confirm null hypothesis; classicFisher, p-value calculated with Fisher`s exact test; adj_pval, FDR adjusted p-value; Category: different class of GO id BP is the abbreviation for Biological Process; Comparison, DEGs from which comparison used for GO enrichment analysis.")
+  
+  goEnrichment1 <- goEnrichment1[order(goEnrichment1$adj_pval),][1:20,]
+  goEnrichment1$adj_pval <- formatC(goEnrichment1$adj_pval, format = "e", digits = 2)
+  print(htmltools::tagList(
+    datatable(goEnrichment1[,-9], 
+              caption = caption, rownames = FALSE)))
+  
+  GOresults[[i]] <- goEnrichment1
+  
+  cat(' \n \n')}
+```
+***
+
+
+
+
+
+
+### GO enrichment analysis barplot {.tabset}
+
+
+```{r GO barplot, results='asis',echo=F, message=FALSE, warning=FALSE, fig.cap=paste("Figure 6: Gene Ontology terms Barplot of enriched terms in an identified set of genes showing altered expression in the ", group_comp$Group.Comparisons," groups. TOP 20 are shown. ")}
+
+GOplottingobject <- function (terms, category, ID, term,adj_pval,genes, sep,FC, identifier, log2FC) {
+  names(FC)[names(FC) == identifier] <- "Name"
+  names(FC)[names(FC) == log2FC] <- "logFC"
+  names(terms)[names(terms) == category] <- 'category'
+  names(terms)[names(terms) == ID] <- 'ID'
+  names(terms)[names(terms)== term] <- 'term'
+  names(terms)[names(terms) == adj_pval] <- 'adj_pval'
+  names(terms)[names(terms) == genes] <- 'genes'
+  tgenes <- strsplit(as.vector(terms$genes), sep)
+  if (length(tgenes[[1]]) == 1) 
+    tgenes <- strsplit(as.vector(terms$genes), ",")
+  count <- sapply(1:length(tgenes), function(x) length(tgenes[[x]]))
+  logFC <- sapply(unlist(tgenes), function(x) FC$logFC[match(x, 
+                                                             FC$Name)])
+  if (class(logFC) == "factor") {
+    logFC <- gsub(",", ".", gsub("\\.", 
+                                 "", logFC))
+    logFC <- as.numeric(logFC)
+  }
+  s <- 1
+  zsc <- c()
+  for (c in 1:length(count)) {
+    value <- 0
+    e <- s + count[c] - 1
+    value <- sapply(logFC[s:e], function(x) ifelse(x > 0, 
+                                                   1, -1))
+    zsc <- c(zsc, sum(value)/sqrt(count[c]))
+    s <- e + 1
+  }
+  if (is.null(terms$id)) {
+    df <- data.frame(category = rep(as.character(terms$category), 
+                                    count), term = rep(as.character(terms$term), count), 
+                     ID = rep(as.character(terms$ID), count),
+                     count = rep(count, count), genes = as.character(unlist(tgenes)), 
+                     logFC = logFC, adj_pval = rep(terms$adj_pval, count), 
+                     zscore = rep(zsc, count), stringsAsFactors = FALSE)
+  }
+  else {
+    df <- data.frame(category = rep(as.character(terms$category), 
+                                    count), ID = rep(as.character(terms$id), count), 
+                     term = rep(as.character(terms$term), count), count = rep(count, 
+                                                                              count), 
+                     ID = rep(as.character(terms$ID), count),genes = as.character(unlist(tgenes)), 
+                     logFC = logFC, adj_pval = rep(terms$adj_pval, count), 
+                     zscore = rep(zsc, count), stringsAsFactors = FALSE)
+  }
+  return(df)
+}
+
+for(i in 1:nrow(group_comp)){
+  cat('####',group_comp$Group.Comparisons[i],' \n')
+
+goEnrichment1 <- GOresults[[i]]
+circa <- GOplottingobject(terms=goEnrichment1, category="Category", ID="ID", term="Term",adj_pval="adj_pval",genes="genes", sep=", ",
+                          FC=DEG1, identifier="external_gene_name", log2FC="log2FoldChange")
+circa <- circa[order(circa$ID),]
+circa$direction = NA
+circa$direction[circa$logFC>0] = 'up'
+circa$direction[circa$logFC<0] = 'down'
+
+circa$`-log10(adj.p-value)` <- (-log10(as.numeric(as.character(circa$adj_pval))))
+library(dplyr)
+circa %>% arrange(desc(`-log10(adj.p-value)`)) -> circa
+circa$group <- rep(1, dim(circa)[1])
+circa <- na.omit(circa)
+
+#circa <- circa[circa$ID %in% TGM2[TGM2$Child=="NA in dataset",]$ID,]
+
+# prepare data for plotting
+plotting_df <-   circa %>% group_by(term, direction, `-log10(adj.p-value)`) %>% 
+  dplyr::summarise(Freq = n()) %>% mutate(Freq = if_else(direction == "down", -Freq, Freq))
+#plotting_df$term1 <- c("- Carboxylic acid \n metabolic process", "- Carboxylic acid \n metabolic process","- Catabolic process","- Catabolic process",                     
+#                       "- Cellular response to \n cytokine stimulus", "- Cellular response to \n cytokine stimulus","- Immune system \n process", 
+#                       "- Immune system \n process","- Metabolic process" ,                    
+#                       "- Metabolic process","- Regulation of multi- \n organism process",   "- Regulation of multi- \n organism process" , 
+#                       "- Response to \n interferon-gamma", "- Response to \n stimulus" , "- Response to \n stimulus",
+#                       "- Type I interferon \n signaling pathway")
+#circ2 <- merge(circ2, plotting_df[,c(1,5)], by.x = "term", by.y="term")
+circa %>% group_by(term, `-log10(adj.p-value)`, direction) %>% filter(direction == 'up') %>% dplyr::summarize(counts=mean(count),p=n()) -> circ2.counts
+
+
+# side-by-side plot
+p <- plotting_df %>% 
+  ggplot(aes(x = reorder(term,`-log10(adj.p-value)`), y = Freq, group = direction, fill = direction)) +
+  geom_bar(stat = "identity", width = 0.75) +  coord_flip()+
+  ylab("Gene counts")+
+  scale_fill_manual(values= c("#B2182B","#2166AC"),
+                    name="log2FC",
+                    breaks=c("down", "up"),
+                    labels=c("down", "up"))+
+  geom_text(aes(label=abs(Freq),y=Freq/1.6, x=term), vjust = 0.5, size=6/.pt)
+
+f <- sum(abs(range(plotting_df$Freq)))/(diff(range(plotting_df$`-log10(adj.p-value)`))+1)*0.5 #factor for top y-axis (coordinates are flipped) scaling
+#add scatter plot on top of barplot
+bp <-  p + 
+  geom_line(data=circa, aes(x=reorder(term,`-log10(adj.p-value)`),
+                            y=f*(`-log10(adj.p-value)`-1.2*median(`-log10(adj.p-value)`)), group=group),
+            color="#4daf4a",size = 0.5) +
+  geom_point(data=circa, aes(x=reorder(term,`-log10(adj.p-value)`),
+                             y=f*(`-log10(adj.p-value)`-1.2*median(`-log10(adj.p-value)`)), group=group),
+             shape=21, color="black", fill="#69b3a2", size=2) +
+  # scale_y_continuous(sec.axis = sec_axis(~.*0.02+median(circ$`-log10(adj.p-value)`), name = "log10")) +
+  theme_bw()+ 
+  #geom_text(data=circ2.counts, aes(x = reorder(term,`-log10(adj.p-value)`), y=20,label = p),size=6/.pt) +
+  scale_y_continuous(sec.axis = sec_axis(~.*1/f+1.2*median(circa$`-log10(adj.p-value)`), name = "-log10(adj.pvalue)"))+
+  theme(plot.title = element_blank(), panel.background = element_rect(fill = 'White'), axis.line = element_line(colour = "black", size=1/.pt),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.title.x.top = element_text(color='#4daf4a',size=10), 
+        axis.text.x.top = element_text(color='#4daf4a',size=8),
+        axis.text.x.bottom = element_text(size=8, color = "black"),
+        axis.title.x.bottom = element_text(size=10, color = "black"), 
+        axis.text.y.left = element_text(size=8,color = "black"),
+        #legend.position = "bottom",
+        legend.title = element_text( size = 6),
+        legend.text = element_text( size = 6),
+        axis.title.y = element_blank(),#text(size=16),
+        strip.text.x = element_text(size = 6))+
+  theme(plot.margin = unit(c(0,0.5,0,0), "cm"),legend.margin=margin(0,0,0,0),#legend.position="bottom", 
+        legend.position = c(0.15, 0.9),
+        legend.key.height = unit(0.1, "mm"),legend.key.width = unit(1, "mm"),legend.background = element_blank(),
+        legend.box.margin=margin(1,2,1,1),
+        legend.box.background = element_rect(colour = "black", size=1/.pt))
+
+#print(htmltools::tagList(bp))
+print(bp) 
+cat(' \n \n')
+}
+
+```
+***
+
+
+### Reactome Enrichment Analysis {.tabset} 
+The [Reactome](http://www.reactome.org){target="_blank"} is a database of reactions, pathways, and biological processes, which can be used to browse pathways and submit data to a suite of data analysis tools, containing curated annotations that cover a diverse set of topics in molecular and cellular biology. Reactome terms with padj < 0.05 are considered to be significant enrichment.  
+
+
+
+Tables with significant Reactome terms and annotated genes are available in Tables folder or can be downloaded using the link: [Tables folder](./tables/){target="_blank"}  
+
+
+```{r Reactome enrichment, results='asis', echo=F, message=FALSE, warning=FALSE}
+library(ReactomePA)
+
+#2.annotate genes with entrez human Ids
+annot_human3 <- getBM(attributes = c("entrezgene_id","ensembl_gene_id"),
+                      filters = "ensembl_gene_id", values = DEG1$ID, mart = human)
+
+RAresults <- list()
+for(i in 1:nrow(group_comp)){
+  cat('####',group_comp$Group.Comparisons[i],' \n')
+  
+experiment <- group_comp$Group.Comparisons[i]
+
+DEG1 <- results[[i]]
+DEG1 <- merge(DEG1, annot_human3, by.x="ID", by.y="ensembl_gene_id")
+
+genesLFC <- DEG1[abs(DEG1$log2FoldChange)>=0.5 & as.numeric(DEG1$padj)<0.05 & DEG1$gene_biotype == "protein_coding",]$log2FoldChange
+names(genesLFC) <- DEG1[abs(DEG1$log2FoldChange)>=0.5 & as.numeric(DEG1$padj)<0.05 & DEG1$gene_biotype == "protein_coding",]$entrezgene_id
+
+
+
+
+Reactome1 <- as.data.frame(enrichPathway(gene=names(genesLFC), pvalueCutoff = 0.05, readable=TRUE))
+Reactome1 <- Reactome1[order(Reactome1$p.adjust),]
+Reactome1$pvalue <- formatC(Reactome1$pvalue, format = "e", digits = 2)
+Reactome1$`p.adjust`<- formatC(Reactome1$p.adjust, format = "e", digits = 2)
+write_xlsx(Reactome1,paste("./tables/",  gsub("/", " per ", group_comp$Group.Comparisons[i]) ,"_ALL_Reactome_terms.xlsx", sep=""))
+
+
+Reactome1 <- Reactome1[1:20,]
+
+caption <- paste('Table 8: Reactome enrichment analysis results, ', group_comp$Group.Comparisons[i], ' comparison. Top 20 terms are shown. ID, unique identification id of Reactome database; Description, function description of this pathway; GeneRatio, ratio between the number of differentially expressed genes in each Reactome ID and all differentially expressed genes that can be found in Reactome database; BgRatio, in background Reactome database, the ratio of all genes annotated on this Reactome term and all genes; pvalue, statistics category term abbreviation for probability value; padj, adjusted p-value; Count, number of differentially expressed genes concerning this term.')
+print(htmltools::tagList(
+datatable(Reactome1[,-c(7:8)], 
+          caption = caption, rownames = FALSE)))
+
+RAresults[[i]] <- Reactome1
+  
+  cat(' \n \n')
+}
+
+```
+***
+
+
+### Reactome enrichment analysis barplot {.tabset}
+
+
+```{r R barplot,results='asis', echo=F, message=FALSE, warning=FALSE, fig.cap=paste("Figure 7: Reactome terms Barplot of enriched terms in an identified set of genes showing altered expression in the ", group_comp$Group.Comparisons, " groups. TOP 20 are shown. ")}
+
+for(i in 1:nrow(group_comp)){
+  cat('####',group_comp$Group.Comparisons[i],' \n')
+
+Reactome1 <- na.omit(RAresults[[i]])
+
+
+Reactome1$Category <- "R"
+circa <- GOplottingobject(terms=Reactome1, category="Category", ID="ID", term="Description",adj_pval="p.adjust",genes="geneID", sep="/",
+                          FC=DEG1, identifier="external_gene_name", log2FC="log2FoldChange")
+circa <- circa[order(circa$ID),]
+circa$direction = NA
+circa$direction[circa$logFC>0] = 'up'
+circa$direction[circa$logFC<0] = 'down'
+circa$`-log10(adj.p-value)` <- (-log10(as.numeric(as.character(circa$adj_pval))))
+library(dplyr)
+circa %>% arrange(desc(`-log10(adj.p-value)`)) -> circa
+circa$group <- rep(1, dim(circa)[1])
+
+#circa <- circa[circa$ID %in% TGM2[TGM2$Child=="NA in dataset",]$ID,]
+
+# prepare data for plotting
+plotting_df <-   circa %>% group_by(term, direction, `-log10(adj.p-value)`) %>% 
+  dplyr::summarise(Freq = n()) %>% mutate(Freq = if_else(direction == "down", -Freq, Freq))
+#plotting_df$term1 <- c("- Carboxylic acid \n metabolic process", "- Carboxylic acid \n metabolic process","- Catabolic process","- Catabolic process",                     
+#                       "- Cellular response to \n cytokine stimulus", "- Cellular response to \n cytokine stimulus","- Immune system \n process", 
+#                       "- Immune system \n process","- Metabolic process" ,                    
+#                       "- Metabolic process","- Regulation of multi- \n organism process",   "- Regulation of multi- \n organism process" , 
+#                       "- Response to \n interferon-gamma", "- Response to \n stimulus" , "- Response to \n stimulus",
+#                       "- Type I interferon \n signaling pathway")
+#circ2 <- merge(circ2, plotting_df[,c(1,5)], by.x = "term", by.y="term")
+circa %>% group_by(term, `-log10(adj.p-value)`, direction) %>% filter(direction == 'up') %>% dplyr::summarize(counts=mean(count),p=n()) -> circ2.counts
+
+
+# side-by-side plot
+p <- plotting_df %>% 
+  ggplot(aes(x = reorder(term,`-log10(adj.p-value)`), y = Freq, group = direction, fill = direction)) +
+  geom_bar(stat = "identity", width = 0.75) +  coord_flip()+
+  ylab("Gene counts")+
+  scale_fill_manual(values= c("#b21878","#18b252"),
+                    name="log2FC",
+                    breaks=c("down", "up"),
+                    labels=c("down", "up"))+
+  geom_text(aes(label=abs(Freq),y=Freq/1.6, x=term), vjust = 0.5, size=6/.pt)
+
+f <- sum(abs(range(na.omit(plotting_df$Freq))))/(diff(range(plotting_df$`-log10(adj.p-value)`))+1)*0.5 #factor for top y-axis (coordinates are flipped) scaling
+#add scatter plot on top of barplot
+bp <-  p + 
+  geom_line(data=circa, aes(x=reorder(term,`-log10(adj.p-value)`),
+                            y=f*(`-log10(adj.p-value)`-1.2*median(`-log10(adj.p-value)`)), group=group),
+            color="#4daf4a",size = 0.5) +
+  geom_point(data=circa, aes(x=reorder(term,`-log10(adj.p-value)`),
+                             y=f*(`-log10(adj.p-value)`-1.2*median(`-log10(adj.p-value)`)), group=group),
+             shape=21, color="black", fill="#69b3a2", size=2) +
+  # scale_y_continuous(sec.axis = sec_axis(~.*0.02+median(circ$`-log10(adj.p-value)`), name = "log10")) +
+  theme_bw()+ 
+  #geom_text(data=circ2.counts, aes(x = reorder(term,`-log10(adj.p-value)`), y=20,label = p),size=6/.pt) +
+  scale_y_continuous(sec.axis = sec_axis(~.*1/f+1.2*median(circa$`-log10(adj.p-value)`), name = "-log10(adj.pvalue)"))+
+  theme(plot.title = element_blank(), panel.background = element_rect(fill = 'White'), axis.line = element_line(colour = "black", size=1/.pt),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        axis.title.x.top = element_text(color='#4daf4a',size=10), 
+        axis.text.x.top = element_text(color='#4daf4a',size=8),
+        axis.text.x.bottom = element_text(size=8, color = "black"),
+        axis.title.x.bottom = element_text(size=10, color = "black"), 
+        axis.text.y.left = element_text(size=8,color = "black"),
+        #legend.position = "bottom",
+        legend.title = element_text( size = 6),
+        legend.text = element_text( size = 6),
+        axis.title.y = element_blank(),#text(size=16),
+        strip.text.x = element_text(size = 6))+
+  theme(plot.margin = unit(c(0,0.5,0,0), "cm"),legend.margin=margin(0,0,0,0),#legend.position="bottom", 
+        legend.position = c(0.15, 0.9),
+        legend.key.height = unit(0.1, "mm"),legend.key.width = unit(1, "mm"),legend.background = element_blank(),
+        legend.box.margin=margin(1,2,1,1),
+        legend.box.background = element_rect(colour = "black", size=1/.pt))
+print(bp)
+cat(' \n \n')
+}
+
+
+```
+***
+
+
+## 5. TGM2 mRNA expression and GO terms it is involved
+
+     
+
+```{r TGM2 expression, echo=F, message=FALSE, warning=FALSE}
+IDs <-c("ENSG00000198959") 
+library(reshape2)
+melt<-melt(normalized_counts[rownames(normalized_counts) %in% IDs,])
+melt$variable <- rownames(melt)
+melt$log10_Expr <- log10(melt$value+1)
+melt <-merge(melt, metadata2[,c("Sample_Name","label")],by.x="variable", by.y="Sample_Name") 
+
+anno<- data.frame()
+for(i in 1:nrow(group_comp)){
+  DEG1 <- results[[i]]
+  anno1 <-subset(DEG1, DEG1$ID %in% IDs, select=c(external_gene_name,baseMean,padj)) 
+  anno1$group1 <- group_comp$label.x[i]
+anno1$group2 <- group_comp$label.y[i]
+  anno <- rbind(anno,anno1)
+}
+
+library(numform)
+anno %>% 
+  mutate(p_new = ifelse(padj > 0.01, c(paste("italic('P')~`=", f_num(padj,2), "`")), padj))%>% 
+  mutate(p_new = ifelse(padj < 0.01, c(paste("italic('P')~`=", f_num(padj,3), "`")), p_new)) %>%
+  mutate(p_new = ifelse(padj < 0.001, c(paste("italic('P')~`", "<.001", "`")),p_new))->anno
+
+anno$y_pos <- max(melt$log10_Expr)*seq(from=1.05, to=1.5, length.out = nrow(group_comp))
+
+
+
+bp<-ggboxplot(melt, x = "label", y = "log10_Expr", outlier.colour = NA, order = unique(metadata2$label), #c("GFDd", "GFDp", "PGCd","PGCp")
+              ylab = "TGM2 mRNA log10(Expression, counts)",# yscale="log2",
+              palette = palette, # c("#ffd700","#ffad00", "#ff934d","#ff6500"),
+              fill="label" #, #facet.by = c("Name"),ncol = 3,scales = "free_y",
+              # title = "TGM2 mRNA expression"
+)+
+  #facet_grid(Marker~Name, scales="free", space="free_x")+
+  geom_jitter(size=0.5, alpha=0.5)+
+  #scale_y_continuous(limits=c(0.7, 3.0))+
+  theme(axis.title.x = element_blank(),
+        axis.text.y=element_blank())+
+  labs(fill = element_blank())+
+  theme(strip.text.x = element_text(size = 6))+
+  geom_signif(data=anno,
+              aes(xmin=group1, xmax=group2, annotations=p_new, y_position=y_pos),
+              textsize = 6/.pt, 
+              manual=TRUE, parse=T, size=0.3)
+
+
+bp <- bp +
+  theme(plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none",
+        axis.text.x = element_text(size=8, color = "black"),
+        axis.text.y= element_text(size=8, color = "black"),
+        axis.title.y = element_text(size=10, color = "black"),
+        panel.spacing.x=unit(0, "lines"))
+
+bp
+```
+***
+`r kableExtra::text_spec("Figure 8: Transglutaminase 2 (TGM2) mRNA expression. ", color = "grey")` 
+
+### Samples GSZs
+
+To assess how reduced by drug TGM2 expression affects the pathways it is involved in we applied Gene Set Z-score (GSZ) calculation approach [(Törönen et al., 2009)](https://doi.org/10.1186/1471-2105-10-307){target="_blank"} .  
+
+GSZ is defined as the difference between the error-weighted mean of the expression values of the genes in each pathway and the error-weighted mean of all genes in a sample after normalization. The number obtained shows how active a certain biological pathway or gene set in a specified sample.  
+
+
+
+To select gene sets where TGM2 is participating, from all enriched GO terms identified in step 4, only those who contain TGM2 gene were selected. 
+Table with significant GO terms is available in Tables folder or could be downloaded using the link: [TGM2 GO terms](./tables/TGM2_ALL_GO_BP_terms.xlsx){target="_blank"}. 
+For subsequent analysis child terms, i.e. those ones that are closer to the leaf nodes, were selected.  
+
+
+```{r TGM2 GSZ barplots, echo=F, message=FALSE, warning=FALSE}
+#check the levels of GO terms
+library(GOxploreR)
+
+#connections <- data.frame()
+#for(i in sel_GO$ID){
+#  if(sum(GOTermBP2ChildLevel(goterm = i)$Terms %in% sel_GO$ID)>0){
+#    tmp <- cbind(GOTermBPOnLevel(goterm = i),Child=paste(GOTermBP2ChildLevel(goterm = i)$Terms,collapse = '/'))
+ #    } else{
+  #    tmp <- cbind(GOTermBPOnLevel(goterm = i),Child="Not present in dataset")}
+  #connections <- rbind(connections,tmp)
+#}
+
+#sel_GO2 <- merge(sel_GO,connections, by.x="ID",by.y="Term")
+
+#sel_GO[sel_GO$Child=="NA in dataset",]$Child <- "Not present in dataset"
+
+#write_xlsx(sel_GO, path = "./tables/TGM2_ALL_GO_BP_terms.xlsx")
+sel_GO2 <- read_xlsx(path = "./tables/TGM2_ALL_GO_BP_terms.xlsx")
+
+#transform to a list
+circa <- GOplottingobject(terms=sel_GO2[sel_GO2$Child=="Not present in dataset",], category="Category", ID="ID", term="Term",adj_pval="adj_pval",genes="genes", sep=", ",FC=results[[1]], identifier="X", log2FC="log2FoldChange")
+
+mglist <- vector("list")
+for(i in unique(circa$term)){
+  mglist[[i]] <- circa[circa$term==i,]$genes
+}
+
+
+
+
+#calculate Sample GSZ
+library(matrixStats)
+Sample.GSZ <- function(gene.set,ex.data){
+  GSZ <- data.frame(Samples=colnames(ex.data))
+  for(i in 1:length(gene.set)){
+    if(length(gene.set[[i]]) > 1){
+    tmp <- sqrt(length(gene.set[[i]])) * ( colMeans( na.omit(ex.data[rownames(ex.data) %in% gene.set[[i]],] )) - colMeans( ex.data ) ) / matrixStats::colSds(as.matrix(ex.data))
+        }else{
+          if (nrow(ex.data[rownames(ex.data) %in% gene.set[[i]],])!=0){
+                  tmp <- sqrt(length(gene.set[[i]])) * ( ex.data[rownames(ex.data) %in% gene.set[[i]],] - colMeans( ex.data ) ) / matrixStats::colSds(as.matrix(ex.data))
+
+          }else{
+        tmp <- sqrt(length(gene.set[[i]])) * ( 0- 0 ) / matrixStats::colSds(as.matrix(ex.data))
+
+          }
+    }
+   names(tmp) <- colnames(ex.data)
+    tmp <- as.data.frame(tmp)
+    colnames(tmp) <- names(gene.set)[i]
+    GSZ <- cbind(GSZ,tmp)
+  }
+  return(GSZ)
+  
+}
+
+#change Ensembl ID to names
+normalized_counts_names <- normalized_counts
+rownames(normalized_counts_names) <- DEG1$external_gene_name[match(rownames(normalized_counts_names), DEG1$ID)]
+
+SampleGSZ <- Sample.GSZ(gene.set=mglist,ex.data=normalized_counts_names)
+
+
+library(reshape2)
+GSZ_melt <- melt(SampleGSZ)
+colnames(GSZ_melt)[2] <- "gene.sets"
+GSZ_melt <- merge(GSZ_melt,metadata2, by.x="Samples", by.y = "Sample_Name")
+
+#calculate p=values for group comparisons
+
+
+
+#require(devtools)
+#install.packages("GSA")
+#install.packages("ismev")
+#install.packages("mGSZ",version = "1.0", repos="http://R-Forge.R-project.org")
+library(mGSZ) 
+groupGSZ <- data.frame()
+
+set.seed(120)
+for(i in 1:nrow(group_comp)){
+  groups2 <- metadata2[metadata2$Treatment %in% c(group_comp[i,1],group_comp[i,2]),]$Treatment
+  normalized_counts2 <- normalized_counts_names[,metadata2[metadata2$Treatment %in% c(group_comp[i,1],group_comp[i,2]),]$Sample_Name]
+  uni <- row.names(normalized_counts2)
+  rownames(normalized_counts2) = make.names(uni, unique=TRUE)
+
+  mGSZ.obj2 <- mGSZ(normalized_counts2, mglist, groups2, perm.number = 100)
+  tmp1 <- mGSZ.obj2$mGSZ
+  tmp1$group1 <- group_comp[i,1]
+  tmp1$group2 <- group_comp[i,2]
+  groupGSZ <- rbind(groupGSZ,tmp1)
+ }
+
+
+groupGSZ <- na.omit(groupGSZ[groupGSZ$pvalue <= 0.05,])
+groupGSZ <- groupGSZ[groupGSZ$group1 %in% c("mock", "100 U/mL hIFNg") & groupGSZ$group2 %in% c("50uM ZED1227", "100 U/mL hIFNg + 50uM ZED1227"),]
+library(dplyr)
+library(numform)
+groupGSZ %>% 
+  mutate(p_new = ifelse(pvalue > 0.01, c(paste("italic('P')~`=", f_num(pvalue,2), "`")), pvalue))%>% 
+  mutate(p_new = ifelse(pvalue < 0.01, c(paste("italic('P')~`=", f_num(pvalue,3), "`")), p_new)) %>%
+  mutate(p_new = ifelse(pvalue < 0.001, c(paste("italic('P')~`", "<.001", "`")),p_new))->groupGSZ
+
+#leave only significant ones
+sets <- unique(groupGSZ$gene.sets)
+GSZ_melt_sign <- GSZ_melt[GSZ_melt$gene.sets %in% sets,]
+groupGSZ <- groupGSZ[groupGSZ$gene.sets %in% sets,]
+
+library(forcats)
+
+links <- vector()
+for(i in unique(GSZ_melt_sign$gene.sets)){
+  df <- GSZ_melt_sign[GSZ_melt_sign$gene.sets==i,]
+  #df$label3 <- factor(df$label3,levels = c("GFD", "PGCd", "PGCp"))
+  df$label <- factor(df$label, levels = unique(metadata2$label))
+  df <- df[ order(match(df$label, metadata2$label)), ]
+  plot <- ggplot(df, aes(x = Samples, y = value,
+                         fill = label))+
+    geom_bar(stat="identity")+
+    scale_fill_manual(values=palette)+
+labs(x="Sample",
+     y="GSZ")+
+  theme_bw()+
+  theme(legend.position="top",
+        legend.title = element_blank()
+  )+
+  rremove("x.text")+
+  scale_x_discrete(limits=df$Samples)+
+  ggtitle(paste("Gene set: ", i, sep=""))
+
+ggexport(plot, filename = paste("./picture/GSZ barplot ",str_replace(str_remove(i,"\\..."),"/","_")," gene set",".png", sep=""),
+         width = 900, height = 500)
+links <- c(links,paste("./picture/GSZ barplot ",str_replace(str_remove(i,"\\..."),"/","_")," gene set",".png", sep="") )
+
+}
+
+library(zousan) #remotes::install_github("kazutan/zousan")
+zousan::carousel(id = "TGM2", img = links, interval = "false", pause = "hover", wrap = F, keyboard = TRUE)
+
+```
+***
+`r kableExtra::text_spec("Figure 9. Sample GSZs for TGM2 involved GO terms. ", color = "grey")` 
+
+### GSZs group comparisons
+
+To be able to compare group gene sets activity, the gene set analysis method described in [ Mishra et al., 2014](https://doi.org/10.1093/bioinformatics/btu374){target="_blank"}, together with asymptotic _P_ -values calculation was applied to our data set.  
+
+
+```{r TGM2 GSZ boxplot , echo=F, message=FALSE, warning=FALSE}
+library(ggpubr)
+meanvalgr <- data.frame()
+for(j in unique(groupGSZ$gene.sets)){
+  tmp <- GSZ_melt_sign[GSZ_melt_sign$gene.sets== j,]
+  group1 <- data.frame()
+   for(k in groupGSZ[groupGSZ$gene.sets==j,]$group1){
+     maxval <- max(tmp[tmp$Treatment==k,]$value)
+tmp1 <- data.frame(gene.sets=j, group1=k, group1max=maxval)   
+group1 <- rbind(group1,tmp1)
+   }
+  group2 <- data.frame()
+   for(m in groupGSZ[groupGSZ$gene.sets==j,]$group2){
+     maxval <- mean(tmp[tmp$Treatment==m,]$value)
+tmp1 <- data.frame(gene.sets=j, group2=m, group2max=maxval)   
+group2 <- rbind(group2,tmp1)
+   }
+     group <- cbind(group1, group2[,-1])
+     meanvalgr <- rbind(meanvalgr, group)
+}
+groupGSZ <- merge(groupGSZ, meanvalgr, by=c("gene.sets","group1","group2"))
+groupGSZ[, "max"] <- apply(groupGSZ[,c("group1max","group2max")], 1, max)
+groupGSZ$y_pos <- groupGSZ$max+0.5
+groupGSZ <- merge(groupGSZ, metadata2[,c("Treatment","label")], by.x="group1", by.y="Treatment")
+groupGSZ <- merge(groupGSZ, metadata2[,c("Treatment","label")], by.x="group2", by.y="Treatment")
+groupGSZ <- unique(groupGSZ)
+
+
+GSZ_melt_sign$gene.sets <- factor(as.character(GSZ_melt_sign$gene.sets), levels=unique(GSZ_melt_sign$gene.sets))
+groupGSZ$gene.sets <- factor(as.character(groupGSZ$gene.sets), levels=unique(GSZ_melt_sign$gene.sets))
+
+bp<-ggboxplot(GSZ_melt_sign, x = "label", y = "value", outlier.colour = NA, order = unique(metadata2$label),
+              ylab = "GSZ",# yscale="log2",
+              palette = palette, #c("#9aceeb", "#ffd700", "#ff934d","#ff6500"), #c("#ffd700","#ff934d","#ff6500"), # c("#ffd700","#ffad00", "#ff934d","#ff6500"),
+              fill="label",facet.by = 'gene.sets', ncol =  3 ,scales = "free_y"
+)+
+  #facet_wrap(~gene.sets, scales="free", space="free_x")+
+  geom_jitter(size=0.5, alpha=0.5)+
+  #scale_y_continuous(limits=c(round(min(GSZ_melt_sign$value)-0.5,1), round(max(groupGSZ$y_pos)+0.5,1)))+
+  theme(axis.title.x = element_blank(),
+        axis.text.y=element_blank())+
+  labs(fill = element_blank())+
+  theme(strip.text.x = element_text(size = 6))+
+  geom_signif(data=groupGSZ,
+              aes(xmin=label.x, xmax=label.y, annotations=p_new, y_position=y_pos),
+              textsize = 6/.pt, 
+              manual=TRUE, parse=T, size=0.3)
+
+bp <- bp +
+  theme(plot.margin = unit(c(0,0,0,0), "cm"), legend.position = "none",
+        axis.text.x = element_text(size=8, color = "black"),
+        axis.text.y= element_text(size=8, color = "black"),
+        axis.title.y = element_text(size=10, color = "black"),
+        panel.spacing.x=unit(0, "lines"))
+
+bp
+```
+***
+`r kableExtra::text_spec("Figure 10. GSZ group comparisons for TGM2 involved GO terms. ", color = "grey")` 
+
+
+## 6. Session information.
+
+```{r 8, echo=F, message=FALSE, warning=FALSE}
+sessionInfo(package = NULL)
+```
