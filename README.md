@@ -18,7 +18,7 @@
 This analysis is based on data published in:
 
 > **Figure 3** of the article:  
-> [*Comparing transcriptomic signatures from CeD biopsies and IFNγ-treated human duodenal organoids.*](https://www.nature.com/articles/s41590-024-01867-0/figures/5]https://www.nature.com/articles/s41590-024-01867-0/figures/3)  
+> [*Comparing transcriptomic signatures from CeD biopsies and IFNγ-treated human duodenal organoids.*](https://www.nature.com/articles/s41590-024-01867-0/figures/3)
 > *Nature Immunology, 2024*
 
 ---
