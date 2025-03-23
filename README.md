@@ -9,17 +9,16 @@
 - `hDUO-ZED1227-sequencing-report.Rmd`  
   > R Markdown file with reproducible RNA-seq analysis workflow  
 - `hDUO-ZED1227-sequencing-report.html`  
-  > 📎 [Knitted HTML report](https://github.com/valeriia-dotsenko/Custom_RNA-seq_analysis_report/blob/main/hDUO-ZED1227-sequencing-report.html)  
+  > 📎 [Knitted HTML report]( https://valeriia-dotsenko.github.io/Custom_RNA-seq_analysis_report/hDUO-ZED1227-sequencing-report.html)  
 ---
 
----
 
 ## 📚 Data Source
 
 This analysis is based on data published in:
 
 > **Figure 3** of the article:  
-> [*Comparing transcriptomic signatures from CeD biopsies and IFNγ-treated human duodenal organoids.*]([https://www.nature.com/articles/s41590-024-01867-0/figures/5](https://www.nature.com/articles/s41590-024-01867-0/figures/3))  
+> [*Comparing transcriptomic signatures from CeD biopsies and IFNγ-treated human duodenal organoids.*](https://www.nature.com/articles/s41590-024-01867-0/figures/5](https://www.nature.com/articles/s41590-024-01867-0/figures/3)  
 > *Nature Immunology, 2024*
 
 ---
